@@ -1,0 +1,34 @@
+Dataset Statistics:
+Unique customers: 995
+Unique products: 80
+Date range: 2023-03-28 to 2025-03-27
+Average transaction value: $210.85
+Return rate: 22.76%
+
+Category Distribution:
+category
+Clothing       1872
+Groceries      1788
+Toys           1785
+Books          1784
+Home Goods     1781
+Beauty         1768
+Sports         1753
+Electronics    1731
+Name: count, dtype: int64
+
+Membership Level Distribution:
+membership_level
+Bronze      2977
+None        2898
+Gold        2819
+Silver      2802
+Platinum    2766
+Name: count, dtype: int64
+
+Location Distribution:
+location
+Urban       5095
+Rural       4737
+Suburban    4430
+Name: count, dtype: int64
