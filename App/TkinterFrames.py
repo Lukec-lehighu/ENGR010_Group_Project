@@ -1,6 +1,7 @@
 import tkinter as tk
 from tkinter import ttk
 from tkinter.filedialog import askopenfilename
+from ttkbootstrap.scrolled import ScrolledText
 
 import pandas as pd
 from pandas.api.types import is_numeric_dtype
@@ -8,6 +9,7 @@ import matplotlib.pyplot as plt
 from PIL import ImageTk, Image
 import seaborn as sns
 import numpy as np
+import json
 import os
 
 #useful functions:
@@ -61,7 +63,7 @@ class DataVisualizer(ttk.Frame):
                 yticklabels=corr.columns.values).get_figure().savefig("temp.png")
 
             img = Image.open('temp.png')
-            img = img.resize((400, 400), Image.ANTIALIAS)
+            img = img.resize((500, 500), Image.LANCZOS)
             self.imgtk = ImageTk.PhotoImage(img)
             self.display_panel.config(image=self.imgtk)
         elif mode == 'scatter':
@@ -77,13 +79,10 @@ class DataPreview(ttk.Frame):
     def __init__(self, parent):
         super().__init__(parent)
 
-        self.data_label = ttk.Label(self, text='No data loaded')
-        self.data_label.config(width=200, font=("Courier", 7))
-        self.scrollbar = ttk.Scrollbar(self, orient='vertical')
-
-        self.scrollbar.pack()
+        self.data_label = ScrolledText(self, padding=5, height=10, width=70, vbar=True)
+        self.data_label.insert(tk.INSERT, "No data loaded", 'body')
+        self.data_label.tag_config('body', foreground="white")
         self.data_label.pack(side='top', fill='both', expand=True, padx=10)
-        self.data_label.configure(yscrollcommand=self.scrollbar.set)
 
     def update(self, df):
         new_text = ''
@@ -94,10 +93,43 @@ class DataPreview(ttk.Frame):
                 new_text += f' - Avg: {round(df[col].mean(), 2)}\n'
                 new_text += f' - Min: {df[col].min()}, Max: {df[col].max()}\n'
             else:
-                new_text += f' - Unique values: {" ".join(set([v for v in df[col]]))}\n'
+                new_text += f' - Number of unique items: {df[col].nunique()}\n'
                 
-        self.data_label.config(text=new_text)
+        self.data_label.delete('1.0', tk.END)
+        self.data_label.insert(tk.INSERT, new_text, 'body')
 
+
+class AxisSelection(ttk.Frame):
+    def __init__(self, parent, df):
+        super().__init__(parent)
+
+        options = [col for col in df.columns if is_numeric_dtype(df[col])]
+
+        self.x_option = tk.StringVar(self)
+        self.x_axis_select = ttk.OptionMenu(
+            self,
+            self.x_option,
+            'Select X Data',
+            *options,
+            command=self.options_changed
+        )
+        self.y_option = tk.StringVar(self)
+        self.y_axis_select = ttk.OptionMenu(
+            self,
+            self.y_option,
+            'Select Y Data',
+            *options,
+            command=self.options_changed
+        )
+
+        self.x_option.pack(side='left', fill='both', expand=True)
+        self.y_option.pack(side='right', fill='both', expand=True)
+
+    def get_options(self):
+        return
+
+    def options_changed(self):
+        pass
 
 #all the buttons to make stuff happen
 class SelectionPanel(ttk.Frame):
@@ -140,7 +172,7 @@ class SelectionPanel(ttk.Frame):
         )
 
         #right side_items
-        
+        #TODO: maybe put in a left side
 
         left_side.pack(side='left', fill='both', expand=True)
         right_side.pack(side='right', fill='both', expand=True)
