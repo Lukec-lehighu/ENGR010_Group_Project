@@ -84,9 +84,8 @@ class DataVisualizer(ttk.Frame):
             except:
                 return #this is here to prevent a key error when the user only has selected one option for the data axis (choices will not be a df column)
 
-            plt.xlabel(choices[0])
-            plt.ylabel(choices[1])
-            plt.plot(x_data, y_data, '.')
+            plt.plot(x_data, y_data, '.', label=f'{choices[0]}/{choices[1]}')
+            plt.legend(loc='lower right')
             plt.savefig('temp.png')
             show_graph = True
         elif mode == 'Histogram':
