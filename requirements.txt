@@ -1,0 +1,4 @@
+ttkbootstrap==1.12.0
+pandas==1.4.2
+pillow==11.2.1
+seaborn==0.11.2
