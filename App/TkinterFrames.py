@@ -45,6 +45,10 @@ def import_file(filename):
 
 #The part of the UI that shows the generated graphs
 class DataVisualizer(ttk.Frame):
+    """
+    The DataVisualizer Frame takes loaded data and renders and displays a graph to the GUI depending on a number of settings
+    Settings will be selected from both the SelectionPanel and the AxisSelection Frames
+    """
     def __init__(self, parent, data_class):
         super().__init__(parent)
         self.data_class = data_class
@@ -65,6 +69,8 @@ class DataVisualizer(ttk.Frame):
             if self.mode != mode:
                 #change detected, reset graph
                 plt.clf()
+                self.mode = mode
+                return # don't render new graph with old data (prevent potential errors)
             self.mode = mode
 
         #assign an internal reference to get selected data points
@@ -79,7 +85,7 @@ class DataVisualizer(ttk.Frame):
                 xticklabels=corr.columns.values,
                 yticklabels=corr.columns.values).get_figure().savefig("temp.png", bbox_inches="tight") #save to temp file
 
-            show_graph = True
+            show_graph = True #set flag to render new graph
         elif mode == 'Scatter' and self.axis_selection:
             try:
                 #attempt to get the selected columns from the loaded data
@@ -94,19 +100,29 @@ class DataVisualizer(ttk.Frame):
             plt.legend(loc='lower right')
             plt.savefig('temp.png')
             show_graph = True
+        elif mode == 'Bar':
+            try:
+                choice = self.axis_selection.get_options()
+                data = self.data_class.loaded_data[choice]
+            except:
+                return # just ignore the error it's probably fine (prevent key error as usual)
+            
+            sns.countplot(x=data, color='gray').get_figure().savefig("temp.png", bbox_inches="tight")
+            show_graph = True
         elif mode == 'Histogram':
             try:
                 choice = self.axis_selection.get_options()
                 data = self.data_class.loaded_data[choice]
             except:
-                return # just ignore the error it's probably fine
+                return # once again ignoring these errors since they aren't important
             
-            plt.clf() #reset graph no matter what for histogram
+            plt.clf()
+            plt.xlabel(choice)
+            plt.ylabel('Quantity')
             plt.hist(data)
             plt.savefig('temp.png')
+
             show_graph = True
-        elif mode == 'BW Plot':
-            pass
         elif mode == 'Reset':
             #reset the plt graph
             plt.clf()
@@ -157,16 +173,19 @@ class DataPreview(ttk.Frame):
 
     #don't ask why this is here, logically it doesn't make sense, but it makes sense if you look at which UI elements are bound together
     def show_axis_selection(self):
-        #show the axis_selection panel
+        #delete old pack to make room for new object
         if self.axis_selection:
-            self.axis_selection.pack_forget() #delete old pack to make room for new object
+            self.axis_selection.pack_forget() 
 
         #create axis selection
         if self.data_visualizer.mode == 'Scatter':
-            self.axis_selection = AxisSelection(self, self.df, self.data_visualizer)
+            self.axis_selection = AxisSelection(self, self.df, self.data_visualizer, categorical=False, single=False)
+            self.axis_selection.pack(side='bottom', fill='both', expand=True, pady=5)
+        elif self.data_visualizer.mode == 'Bar':
+            self.axis_selection = AxisSelection(self, self.df, self.data_visualizer, categorical=True, single=True)
             self.axis_selection.pack(side='bottom', fill='both', expand=True, pady=5)
         elif self.data_visualizer.mode == 'Histogram':
-            self.axis_selection = AxisSelection(self, self.df, self.data_visualizer, hist_mode=True)
+            self.axis_selection = AxisSelection(self, self.df, self.data_visualizer, categorical=False, single=True)
             self.axis_selection.pack(side='bottom', fill='both', expand=True, pady=5)
 
 class AxisSelection(ttk.Frame):
@@ -174,13 +193,14 @@ class AxisSelection(ttk.Frame):
     The AxisSelection frame allows for the user to select from a dropdown which columns of the loaded data
     will be used to render the graphs.
     """
-    def __init__(self, parent, df, data_visualizer, hist_mode=False):
+    def __init__(self, parent, df, data_visualizer, categorical=False, single=False):
         super().__init__(parent)
         self.data_visualizer = data_visualizer
-        self.hist_mode = hist_mode
+        self.categorical = categorical
+        self.single = single
 
         options = []
-        if hist_mode:
+        if categorical:
             options = [col for col in df.columns if df[col].nunique()<=10 and not is_numeric_dtype(df[col])] #not numeric data that has 10 or less unique categories
         else:
             options = [col for col in df.columns if is_numeric_dtype(df[col])] #numeric data only
@@ -189,7 +209,7 @@ class AxisSelection(ttk.Frame):
         self.x_axis_select = ttk.OptionMenu(
             self,
             self.x_option,
-            'Select Data' if hist_mode else 'Select X Data',
+            'Select Data' if single else 'Select X Data',
             *options,
             command=self.options_changed
         )
@@ -203,11 +223,11 @@ class AxisSelection(ttk.Frame):
         )
 
         self.x_axis_select.pack(side='left', fill='both')
-        if not hist_mode:
+        if not single:
             self.y_axis_select.pack(side='right', fill='both')
 
     def get_options(self):
-        if self.hist_mode:
+        if self.single:
             return self.x_option.get()
 
         return self.x_option.get(), self.y_option.get()
@@ -239,7 +259,7 @@ class SelectionPanel(ttk.Frame):
             command=self.options_changed
         )
 
-        graph_options = ['Scatter', 'Histogram', 'BW Plot']
+        graph_options = ['Scatter', 'Bar', 'Histogram']
         self.graph_option = tk.StringVar(self)
         self.graph_dropdown = ttk.OptionMenu(
             left_side,
@@ -339,13 +359,21 @@ class App(ttk.Frame):
         """
         Uses tkinter to open a file exploration panel to allow the user to select a file.
         Uses the import_file function to load the file into a PD object.
-        Runs some basic data cleaning on loaded data
+        Runs some basic data cleaning and prepping on loaded data
         """
         filename = askopenfilename() # get file location using tkinter
         try:
             #try prompting the user to select a file from their system
             self.loaded_data = import_file(filename)
+
+            #prep data
             self.loaded_data = self.loaded_data.fillna(0)
+            for col in self.loaded_data.columns:
+                #convert boolean entries to categorical
+                if self.loaded_data[col].dtypes =='bool':
+                    self.loaded_data[col] = self.loaded_data[col].astype('category')
+
+            #set status text
             self.status_text.config(text='Data loaded!', foreground='green')
             self.selection_panel.update_visibility()
 
