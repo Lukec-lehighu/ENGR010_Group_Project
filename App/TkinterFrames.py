@@ -188,7 +188,7 @@ class DataVisualizer(ttk.Frame):
         #test model
         y_pred = knn.predict(X_test)
 
-        #generate conf_
+        #generate conf
         conf_matrix = confusion_matrix(y_test, y_pred)
         plt.figure(figsize=(8, 6))
         sns.heatmap(conf_matrix, annot=True, cmap="Blues", fmt="d", xticklabels=y.unique(), yticklabels=y.unique()).get_figure().savefig("temp.png", bbox_inches="tight")
@@ -196,7 +196,6 @@ class DataVisualizer(ttk.Frame):
         self.info_panel.config(text='') #reset the info text
         self.show_graph() #update display
         
-
 
 
 #basic analysis and summary of imported data
@@ -273,11 +272,19 @@ class AxisSelection(ttk.Frame):
         else:
             options = [col for col in df.columns if is_numeric_dtype(df[col])] #numeric data only
 
+        #determining the name of the x selection dropdown (depends on mode)
+        x_selection_name = 'Select X Data' #default
+        if single:
+            if pred_name:
+                x_selection_name = 'Select Prediction Class'
+            else:
+                x_selection_name = 'Select Data'
+
         self.x_option = tk.StringVar(self)
         self.x_axis_select = ttk.OptionMenu(
             self,
             self.x_option,
-            'Select Data' if single else 'Select Prediction Class' if pred_name else 'Select X Data',
+            x_selection_name,
             *options,
             command=self.options_changed
         )
@@ -290,9 +297,9 @@ class AxisSelection(ttk.Frame):
             command=self.options_changed
         )
 
-        self.x_axis_select.pack(side='left', fill='both')
+        self.x_axis_select.pack(side='left', fill='both', padx=10)
         if not single:
-            self.y_axis_select.pack(side='right', fill='both')
+            self.y_axis_select.pack(side='right', fill='both', padx=10)
 
     def get_options(self):
         if self.single:

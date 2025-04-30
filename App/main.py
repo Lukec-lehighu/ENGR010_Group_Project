@@ -1,6 +1,6 @@
 import tkinter as tk
 import sv_ttk #dark ttk theme
-from TkinterFrames import * #import all the custom classes
+from TkinterFrames import App #import main app
 
 if __name__ == '__main__':
     root = tk.Tk()
