@@ -131,13 +131,15 @@ class DataVisualizer(ttk.Frame):
             plt.clf()
             plt.savefig('temp.png')
             show_graph = True
+        elif mode == 'KNN':
+            self.knn()
 
         #assumes the code above actually created a temp.png when this is true
         if show_graph:
             self.show_graph()
 
     def show_graph(self):
-        #load from temporary file
+        #load image from temporary file and display in frame's panel
         img = Image.open('temp.png')
         img = img.resize((600, 500), Image.LANCZOS)
         self.imgtk = ImageTk.PhotoImage(img)
@@ -148,13 +150,53 @@ class DataVisualizer(ttk.Frame):
             #attempt to get the selected columns from the loaded data
             choices = self.axis_selection.get_options()
             sns.regplot(data=self.data_class.loaded_data, x=choices[0], y=choices[1], scatter=False).get_figure().savefig("temp.png", bbox_inches="tight")
+
+            #calculating the regplot information for displaying
             slope, intercept, r, _, _ = scipy.stats.linregress(x=self.data_class.loaded_data[choices[0]],
                                                                 y=self.data_class.loaded_data[choices[1]])
             
-            self.info_panel.config(text=f'y={round(slope,2)}x+{round(intercept,2)}\nr²={round(r**2, 2)}', foreground='#038cfc')
+            #display calculated information in the info_panel
+            self.info_panel.config(text=f'y = {round(slope,2)}x + {round(intercept,2)}\nr² = {round(r**2, 2)}', foreground='#038cfc')
             self.show_graph()
         except:
-            pass
+            pass #no reason for this to error unless the user did something wrong, so no reason to make the whole code break
+
+    def knn(self):
+        """
+            Creates a KNN model, creates test and training data, and fits the model
+            The output of this function is a confidence matrix of the created model
+            The matrix is then rendered to the screen using show_graph()
+        """
+
+        choice = self.axis_selection.get_options()
+
+        #extract data
+        y = self.data_class.loaded_data[choice]
+        x = self.data_class.loaded_data.copy()
+
+        #drop prediction column and all other non-numeric data
+        x = x.drop(columns=[choice,])
+        x = x.select_dtypes(['number'])
+
+        #create train test splits
+        X_train, X_test, y_train, y_test = train_test_split(x, y, test_size=0.30)
+
+        #create and fit model
+        knn = KNeighborsClassifier(n_neighbors=5)
+        knn.fit(X_train, y_train)
+
+        #test model
+        y_pred = knn.predict(X_test)
+
+        #generate conf_
+        conf_matrix = confusion_matrix(y_test, y_pred)
+        plt.figure(figsize=(8, 6))
+        sns.heatmap(conf_matrix, annot=True, cmap="Blues", fmt="d", xticklabels=y.unique(), yticklabels=y.unique()).get_figure().savefig("temp.png", bbox_inches="tight")
+
+        self.info_panel.config(text='') #reset the info text
+        self.show_graph() #update display
+        
+
 
 
 #basic analysis and summary of imported data
@@ -194,28 +236,32 @@ class DataPreview(ttk.Frame):
         self.data_label.insert(tk.INSERT, new_text, 'body')
 
     #don't ask why this is here, logically it doesn't make sense, but it makes sense if you look at which UI elements are bound together
-    def show_axis_selection(self):
+    def show_axis_selection(self, knn_mode=False):
         #delete old pack to make room for new object
         if self.axis_selection:
             self.axis_selection.pack_forget() 
 
-        #create axis selection
-        if self.data_visualizer.mode == 'Scatter':
-            self.axis_selection = AxisSelection(self, self.df, self.data_visualizer, categorical=False, single=False)
+        if knn_mode:
+            self.axis_selection = AxisSelection(self, self.df, self.data_visualizer, categorical=True, single=True, pred_name=True)
             self.axis_selection.pack(side='bottom', fill='both', expand=True, pady=5)
-        elif self.data_visualizer.mode == 'Bar':
-            self.axis_selection = AxisSelection(self, self.df, self.data_visualizer, categorical=True, single=True)
-            self.axis_selection.pack(side='bottom', fill='both', expand=True, pady=5)
-        elif self.data_visualizer.mode == 'Histogram':
-            self.axis_selection = AxisSelection(self, self.df, self.data_visualizer, categorical=False, single=True)
-            self.axis_selection.pack(side='bottom', fill='both', expand=True, pady=5)
+        else:
+            #create axis selection
+            if self.data_visualizer.mode == 'Scatter':
+                self.axis_selection = AxisSelection(self, self.df, self.data_visualizer, categorical=False, single=False)
+                self.axis_selection.pack(side='bottom', fill='both', expand=True, pady=5)
+            elif self.data_visualizer.mode == 'Bar':
+                self.axis_selection = AxisSelection(self, self.df, self.data_visualizer, categorical=True, single=True)
+                self.axis_selection.pack(side='bottom', fill='both', expand=True, pady=5)
+            elif self.data_visualizer.mode == 'Histogram':
+                self.axis_selection = AxisSelection(self, self.df, self.data_visualizer, categorical=False, single=True)
+                self.axis_selection.pack(side='bottom', fill='both', expand=True, pady=5)
 
 class AxisSelection(ttk.Frame):
     """
     The AxisSelection frame allows for the user to select from a dropdown which columns of the loaded data
     will be used to render the graphs.
     """
-    def __init__(self, parent, df, data_visualizer, categorical=False, single=False):
+    def __init__(self, parent, df, data_visualizer, categorical=False, single=False, pred_name=False):
         super().__init__(parent)
         self.data_visualizer = data_visualizer
         self.categorical = categorical
@@ -231,7 +277,7 @@ class AxisSelection(ttk.Frame):
         self.x_axis_select = ttk.OptionMenu(
             self,
             self.x_option,
-            'Select Data' if single else 'Select X Data',
+            'Select Data' if single else 'Select Prediction Class' if pred_name else 'Select X Data',
             *options,
             command=self.options_changed
         )
@@ -271,7 +317,7 @@ class SelectionPanel(ttk.Frame):
         right_side = ttk.Frame(self)
 
         #left side items
-        mode_options = ['Graph', 'Correlation Matrix']
+        mode_options = ['Graph', 'Correlation Matrix', 'KNN']
         self.mode_option = tk.StringVar(self)
         self.mode_dropdown = ttk.OptionMenu(
             left_side,
@@ -294,8 +340,7 @@ class SelectionPanel(ttk.Frame):
         self.reset_btn = ttk.Button(left_side, text="Reset Graph", command=lambda: self.data_visualizer.update(mode='Reset'))
 
         #right side items
-        self.regression_btn = ttk.Button(right_side, text='Regression', command=lambda: self.run_anal('Reg'))
-        self.knn_btn = ttk.Button(right_side, text='KNN Model', command=lambda: self.run_anal('KNN'))
+        self.regression_btn = ttk.Button(right_side, text='Regression', command=lambda: self.data_visualizer.regression())
 
         left_side.pack(side='left', fill='both', expand=True, padx=5)
         right_side.pack(side='right', fill='both', expand=True)
@@ -312,7 +357,6 @@ class SelectionPanel(ttk.Frame):
         self.graph_dropdown.pack_forget()
         self.reset_btn.pack_forget()
         self.regression_btn.pack_forget()
-        self.knn_btn.pack_forget()
     
     def update_visibility(self):
         """
@@ -321,7 +365,6 @@ class SelectionPanel(ttk.Frame):
         self.reset_visibility()
 
         self.mode_dropdown.pack(side='top', fill='both', expand=True, pady=3)
-        self.knn_btn.pack(side='top', fill='both', pady=3)
 
         if self.mode_option.get() == 'Correlation Matrix':
             self.data_visualizer.update('corr_mat')
@@ -330,20 +373,16 @@ class SelectionPanel(ttk.Frame):
             self.graph_dropdown.pack(side='top', fill='both', expand=True, pady=3)
             self.reset_btn.pack(side='top', fill='both', expand=True, pady=3)
 
+            #only show the option to do linear regression if in scatterplot mode
             if self.graph_option.get() == 'Scatter':
                 self.regression_btn.pack(side='top', fill='both', pady=3)
 
+            #update the UI visualization and selection options
             self.data_visualizer.update(mode=self.graph_option.get())
             self.data_preview.show_axis_selection()
-
-    def run_anal(self, mode):
-        if mode=='Reg':
-            #regression mode
-            self.data_visualizer.regression()
-        elif mode=='KNN':
-            #KNN mode
-            pass
-
+        elif self.mode_option.get() == 'KNN':
+            self.data_preview.show_axis_selection(knn_mode=True)
+            self.data_visualizer.mode='KNN'
 
 #main app structure and functions
 class App(ttk.Frame):
