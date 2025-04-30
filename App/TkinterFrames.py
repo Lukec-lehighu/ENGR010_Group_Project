@@ -167,34 +167,39 @@ class DataVisualizer(ttk.Frame):
             The output of this function is a confidence matrix of the created model
             The matrix is then rendered to the screen using show_graph()
         """
+        try: #once again putting everything in try-except blocks to prevent errors from printing when user doesn't select data axis (intentional)
+            choice = self.axis_selection.get_options()
 
-        choice = self.axis_selection.get_options()
+            #extract data
+            y = self.data_class.loaded_data[choice]
+            x = self.data_class.loaded_data.copy()
 
-        #extract data
-        y = self.data_class.loaded_data[choice]
-        x = self.data_class.loaded_data.copy()
+            #drop prediction column and all other non-numeric data
+            x = x.drop(columns=[choice,])
+            x = x.select_dtypes(['number'])
 
-        #drop prediction column and all other non-numeric data
-        x = x.drop(columns=[choice,])
-        x = x.select_dtypes(['number'])
+            #create train test splits
+            X_train, X_test, y_train, y_test = train_test_split(x, y, test_size=0.30)
 
-        #create train test splits
-        X_train, X_test, y_train, y_test = train_test_split(x, y, test_size=0.30)
+            #create and fit model
+            knn = KNeighborsClassifier(n_neighbors=5)
+            knn.fit(X_train, y_train)
 
-        #create and fit model
-        knn = KNeighborsClassifier(n_neighbors=5)
-        knn.fit(X_train, y_train)
+            #test model
+            y_pred = knn.predict(X_test)
 
-        #test model
-        y_pred = knn.predict(X_test)
+            #generate conf
+            conf_matrix = confusion_matrix(y_test, y_pred)
+            plt.figure(figsize=(8, 6))
+            sns.heatmap(conf_matrix, annot=True, cmap="Blues", fmt="d", xticklabels=y.unique(), yticklabels=y.unique())
+            plt.xlabel("Predicted Label")
+            plt.ylabel("True Label")
+            plt.savefig('temp.png')
 
-        #generate conf
-        conf_matrix = confusion_matrix(y_test, y_pred)
-        plt.figure(figsize=(8, 6))
-        sns.heatmap(conf_matrix, annot=True, cmap="Blues", fmt="d", xticklabels=y.unique(), yticklabels=y.unique()).get_figure().savefig("temp.png", bbox_inches="tight")
-
-        self.info_panel.config(text='') #reset the info text
-        self.show_graph() #update display
+            self.info_panel.config(text='') #reset the info text
+            self.show_graph() #update display
+        except:
+            pass
         
 
 
