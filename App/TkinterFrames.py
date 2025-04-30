@@ -3,12 +3,16 @@ from tkinter import ttk
 from tkinter.filedialog import askopenfilename
 from ttkbootstrap.scrolled import ScrolledText
 
+from sklearn.model_selection import train_test_split
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.metrics import accuracy_score, confusion_matrix
+
 import pandas as pd
 from pandas.api.types import is_numeric_dtype
 import matplotlib.pyplot as plt
 from PIL import ImageTk, Image
 import seaborn as sns
-import numpy as np
+import scipy
 import json
 import os
 
@@ -41,7 +45,7 @@ def import_file(filename):
             raise ValueError(f"Unsupported file format: {file_extension}")
     except Exception as e:
         raise RuntimeError(f"Error processing file '{filename}': {str(e)}")
-
+    
 
 #The part of the UI that shows the generated graphs
 class DataVisualizer(ttk.Frame):
@@ -54,7 +58,10 @@ class DataVisualizer(ttk.Frame):
         self.data_class = data_class
         
         self.display_panel = ttk.Label(self)
-        self.display_panel.pack(fill='both', expand=True, padx=10)
+        self.info_panel = ttk.Label(self, text='')
+
+        self.info_panel.pack(side='top', fill='both', pady=5)
+        self.display_panel.pack(side='top', fill='both', expand=True, padx=10)
 
         self.mode = ''
         self.axis_selection = None
@@ -63,6 +70,8 @@ class DataVisualizer(ttk.Frame):
         """
         Given a given mode, update the graph data and set the display window to reflect this change in graph
         """
+        self.info_panel.config(text='')
+
         if mode == '':
             mode = self.mode
         elif mode!='Reset':
@@ -70,7 +79,8 @@ class DataVisualizer(ttk.Frame):
                 #change detected, reset graph
                 plt.clf()
                 self.mode = mode
-                return # don't render new graph with old data (prevent potential errors)
+                if mode!='corr_mat':
+                    return # don't render new graph with old data (prevent potential errors)
             self.mode = mode
 
         #assign an internal reference to get selected data points
@@ -90,16 +100,10 @@ class DataVisualizer(ttk.Frame):
             try:
                 #attempt to get the selected columns from the loaded data
                 choices = self.axis_selection.get_options()
-                x_data = self.data_class.loaded_data[choices[0]]
-                y_data = self.data_class.loaded_data[choices[1]]
+                sns.scatterplot(data=self.data_class.loaded_data, x=choices[0], y=choices[1]).get_figure().savefig("temp.png", bbox_inches="tight")
+                show_graph = True
             except:
                 return #this is here to prevent a key error when the user only has selected one option for the data axis (choices will not be a df column)
-
-            #plot with a label so a legend can be constructed
-            plt.plot(x_data, y_data, '.', label=f'{choices[0]}/{choices[1]}')
-            plt.legend(loc='lower right')
-            plt.savefig('temp.png')
-            show_graph = True
         elif mode == 'Bar':
             try:
                 choice = self.axis_selection.get_options()
@@ -107,7 +111,7 @@ class DataVisualizer(ttk.Frame):
             except:
                 return # just ignore the error it's probably fine (prevent key error as usual)
             
-            sns.countplot(x=data, color='gray').get_figure().savefig("temp.png", bbox_inches="tight")
+            sns.countplot(x=data, palette='Set2').get_figure().savefig("temp.png", bbox_inches="tight")
             show_graph = True
         elif mode == 'Histogram':
             try:
@@ -118,7 +122,6 @@ class DataVisualizer(ttk.Frame):
             
             plt.clf()
             plt.xlabel(choice)
-            plt.ylabel('Quantity')
             plt.hist(data)
             plt.savefig('temp.png')
 
@@ -131,11 +134,27 @@ class DataVisualizer(ttk.Frame):
 
         #assumes the code above actually created a temp.png when this is true
         if show_graph:
-            #load from temporary file
-            img = Image.open('temp.png')
-            img = img.resize((600, 500), Image.LANCZOS)
-            self.imgtk = ImageTk.PhotoImage(img)
-            self.display_panel.config(image=self.imgtk)
+            self.show_graph()
+
+    def show_graph(self):
+        #load from temporary file
+        img = Image.open('temp.png')
+        img = img.resize((600, 500), Image.LANCZOS)
+        self.imgtk = ImageTk.PhotoImage(img)
+        self.display_panel.config(image=self.imgtk)
+
+    def regression(self):
+        try:
+            #attempt to get the selected columns from the loaded data
+            choices = self.axis_selection.get_options()
+            sns.regplot(data=self.data_class.loaded_data, x=choices[0], y=choices[1], scatter=False).get_figure().savefig("temp.png", bbox_inches="tight")
+            slope, intercept, r, _, _ = scipy.stats.linregress(x=self.data_class.loaded_data[choices[0]],
+                                                                y=self.data_class.loaded_data[choices[1]])
+            
+            self.info_panel.config(text=f'y={round(slope,2)}x+{round(intercept,2)}\nr²={round(r**2, 2)}', foreground='#038cfc')
+            self.show_graph()
+        except:
+            pass
 
 
 #basic analysis and summary of imported data
@@ -147,6 +166,9 @@ class DataPreview(ttk.Frame):
     def __init__(self, parent, data_visualizer):
         super().__init__(parent)
         self.data_visualizer = data_visualizer #to be passed to the axis selection class
+
+        self.title = ttk.Label(self, text="Loaded Data Summary:")
+        self.title.pack(side='top', fill='both', expand=True, pady=5, padx=15)
 
         self.data_label = ScrolledText(self, padding=5, height=10, width=70, vbar=True)
         self.data_label.insert(tk.INSERT, "No data loaded", 'body')
@@ -201,7 +223,7 @@ class AxisSelection(ttk.Frame):
 
         options = []
         if categorical:
-            options = [col for col in df.columns if df[col].nunique()<=10 and not is_numeric_dtype(df[col])] #not numeric data that has 10 or less unique categories
+            options = [col for col in df.columns if not is_numeric_dtype(df[col]) and df[col].nunique()<=10] #not numeric data that has 10 or less unique categories
         else:
             options = [col for col in df.columns if is_numeric_dtype(df[col])] #numeric data only
 
@@ -269,22 +291,13 @@ class SelectionPanel(ttk.Frame):
             command=self.options_changed
         )
 
-        anal_options = ['K-Means', 'Classification', 'Regression']
-        self.anal_option = tk.StringVar(self)
-        self.anal_dropdown = ttk.OptionMenu(
-            left_side,
-            self.anal_option,
-            'Analysis Mode',
-            *anal_options,
-            command=self.options_changed
-        )
-
         self.reset_btn = ttk.Button(left_side, text="Reset Graph", command=lambda: self.data_visualizer.update(mode='Reset'))
 
-        #right side_items
-        #TODO: maybe put in a left side
+        #right side items
+        self.regression_btn = ttk.Button(right_side, text='Regression', command=lambda: self.run_anal('Reg'))
+        self.knn_btn = ttk.Button(right_side, text='KNN Model', command=lambda: self.run_anal('KNN'))
 
-        left_side.pack(side='left', fill='both', expand=True)
+        left_side.pack(side='left', fill='both', expand=True, padx=5)
         right_side.pack(side='right', fill='both', expand=True)
         
 
@@ -297,8 +310,9 @@ class SelectionPanel(ttk.Frame):
         """
         self.mode_dropdown.pack_forget()
         self.graph_dropdown.pack_forget()
-        self.anal_dropdown.pack_forget()
         self.reset_btn.pack_forget()
+        self.regression_btn.pack_forget()
+        self.knn_btn.pack_forget()
     
     def update_visibility(self):
         """
@@ -307,16 +321,28 @@ class SelectionPanel(ttk.Frame):
         self.reset_visibility()
 
         self.mode_dropdown.pack(side='top', fill='both', expand=True, pady=3)
+        self.knn_btn.pack(side='top', fill='both', pady=3)
+
         if self.mode_option.get() == 'Correlation Matrix':
             self.data_visualizer.update('corr_mat')
         elif self.mode_option.get() == 'Graph':
             #add the new dropdowns to the menu visible when on Graph mode
             self.graph_dropdown.pack(side='top', fill='both', expand=True, pady=3)
-            self.anal_dropdown.pack(side='top', fill='both', expand=True, pady=3)
             self.reset_btn.pack(side='top', fill='both', expand=True, pady=3)
-            
+
+            if self.graph_option.get() == 'Scatter':
+                self.regression_btn.pack(side='top', fill='both', pady=3)
+
             self.data_visualizer.update(mode=self.graph_option.get())
             self.data_preview.show_axis_selection()
+
+    def run_anal(self, mode):
+        if mode=='Reg':
+            #regression mode
+            self.data_visualizer.regression()
+        elif mode=='KNN':
+            #KNN mode
+            pass
 
 
 #main app structure and functions
