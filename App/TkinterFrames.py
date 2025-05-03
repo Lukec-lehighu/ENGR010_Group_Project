@@ -1,12 +1,15 @@
+#UI imports
 import tkinter as tk
 from tkinter import ttk
 from tkinter.filedialog import askopenfilename
 from ttkbootstrap.scrolled import ScrolledText
 
+#KNN imports
 from sklearn.model_selection import train_test_split
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.metrics import confusion_matrix
 
+#misc imports
 import pandas as pd
 from pandas.api.types import is_numeric_dtype
 import matplotlib.pyplot as plt
@@ -16,7 +19,7 @@ import scipy
 import json
 import os
 
-#useful functions:
+#useful function:
 #chatgpt generated
 def import_file(filename):
     """
@@ -45,7 +48,7 @@ def import_file(filename):
             raise ValueError(f"Unsupported file format: {file_extension}")
     except Exception as e:
         raise RuntimeError(f"Error processing file '{filename}': {str(e)}")
-    
+#chatgpt generated function above  
 
 #The part of the UI that shows the generated graphs
 class DataVisualizer(ttk.Frame):
@@ -139,6 +142,9 @@ class DataVisualizer(ttk.Frame):
             self.show_graph()
 
     def show_graph(self):
+        """
+            Simple function to take a temporary file and render it to the display panel
+        """
         #load image from temporary file and display in frame's panel
         img = Image.open('temp.png')
         img = img.resize((600, 500), Image.LANCZOS)
@@ -146,6 +152,10 @@ class DataVisualizer(ttk.Frame):
         self.display_panel.config(image=self.imgtk)
 
     def regression(self):
+        """
+            Uses a combination of sns regplot and scipy to graph the linear regression line given the user selected data
+            and print the calculated line values in y=mx+b form
+        """
         try:
             #attempt to get the selected columns from the loaded data
             choices = self.axis_selection.get_options()
@@ -319,6 +329,7 @@ class AxisSelection(ttk.Frame):
 class SelectionPanel(ttk.Frame):
     """
     The SelectionPanel frame renders buttons and dropdowns that the user can use to manipulate the analysis of the data
+    Keeps track of what display modes are currently selected
     """
     def __init__(self, parent, data_visualizer, data_preview):
         super().__init__(parent)
@@ -373,6 +384,7 @@ class SelectionPanel(ttk.Frame):
     def update_visibility(self):
         """
         Determines what items will be visible
+        Starts by hiding all objects and only shows UI elements depending on what mode is selected by the user
         """
         self.reset_visibility()
 

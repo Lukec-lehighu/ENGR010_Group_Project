@@ -8,5 +8,5 @@ if __name__ == '__main__':
     root.geometry("1320x600")
 
     App(root).pack(side="top", fill="both", expand=True) #add the main app to the root of the window
-    sv_ttk.set_theme("dark") #make the app evil (dark theme)
-    root.mainloop() #run that thang
+    sv_ttk.set_theme("dark") #set dark mode for more professional app appearance 
+    root.mainloop() #run the app
